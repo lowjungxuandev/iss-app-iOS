@@ -10,9 +10,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-upload:
-    name: Build IPAs for all schemes
+  build:
+    name: Build IPAs (matrix)
     runs-on: macos-26
+    permissions:
+      contents: write
 
     env:
       PROJECT: ISSApp.xcodeproj
@@ -32,12 +34,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Detect local 'act' runs:
+      # - recommended: run `act --env ACT=true`
+      # - fallback: default actor for act is usually `nektos/act`
+      - name: Compute is_act
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${ACT:-}" == "true" || "${{ github.actor }}" == "nektos/act" ]]; then
+            echo "is_act=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_act=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "ACT=${ACT:-<unset>}"
+          echo "github.actor=${{ github.actor }}"
+
       - name: Show Xcode version
-        if: env.ACT != 'true'
+        if: steps.detect.outputs.is_act != 'true'
         run: xcodebuild -version
 
       - name: Build unsigned (no Apple account)
-        if: env.ACT != 'true'
+        if: steps.detect.outputs.is_act != 'true'
         run: |
           set -eo pipefail
           mkdir -p "$OUTPUT_DIR"
@@ -55,7 +73,7 @@ jobs:
             build
 
       - name: Package .app into IPA
-        if: env.ACT != 'true'
+        if: steps.detect.outputs.is_act != 'true'
         run: |
           set -eo pipefail
           DEVICE_APP="$OUTPUT_DIR/${{ matrix.configuration }}-iphoneos/$TARGET.app"
@@ -63,28 +81,76 @@ jobs:
             echo "Error: Built app not found at $DEVICE_APP"
             exit 1
           fi
-          PAYLOAD_DIR="$OUTPUT_DIR/Payload-${{ matrix.configuration }}"
+
+          # Apple IPA structure: Payload/<App>.app
+          PAYLOAD_DIR="$OUTPUT_DIR/Payload"
           rm -rf "$PAYLOAD_DIR"
           mkdir -p "$PAYLOAD_DIR"
           cp -R "$DEVICE_APP" "$PAYLOAD_DIR/"
-          cd "$OUTPUT_DIR"
-          zip -r -y "${{ matrix.ipa_name }}.ipa" "Payload-${{ matrix.configuration }}"
-          cd -
+
+          (cd "$OUTPUT_DIR" && zip -r -y "${{ matrix.ipa_name }}.ipa" "Payload")
           echo "Created $OUTPUT_DIR/${{ matrix.ipa_name }}.ipa"
 
       - name: Simulate build under act (no macOS/Xcode)
-        if: env.ACT == 'true'
+        if: steps.detect.outputs.is_act == 'true'
         run: |
           set -eo pipefail
           mkdir -p "$OUTPUT_DIR"
           echo "Simulating IPA for ${{ matrix.configuration }} under act..."
-          echo "dummy ipa content" > "$OUTPUT_DIR/${{ matrix.ipa_name }}.ipa"
+          printf "dummy ipa content: %s\n" "${{ matrix.configuration }}" > "$OUTPUT_DIR/${{ matrix.ipa_name }}.ipa"
 
-      - name: Upload IPA to GitHub Release
-        if: env.ACT != 'true' && github.event_name == 'release'
+      - name: Upload IPA as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-${{ matrix.ipa_name }}
+          path: build/${{ matrix.ipa_name }}.ipa
+
+  release:
+    name: Create/Upload Release assets
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download IPA artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ipa-*
+          merge-multiple: true
+          path: build
+
+      # Detect act here too (so local runs don't try to create releases)
+      - name: Compute is_act
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${ACT:-}" == "true" || "${{ github.actor }}" == "nektos/act" ]]; then
+            echo "is_act=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_act=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # On pushes to main: auto-create a Release and upload IPAs
+      - name: Create Release (push to main) + upload IPAs
+        if: steps.detect.outputs.is_act != 'true' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          generate_release_notes: true
+          files: |
+            build/*.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # On manually published Releases: just upload IPAs to that Release
+      - name: Upload IPAs to published Release
+        if: steps.detect.outputs.is_act != 'true' && github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/${{ matrix.ipa_name }}.ipa
+            build/*.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
