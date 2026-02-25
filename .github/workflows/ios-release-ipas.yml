@@ -1,0 +1,86 @@
+name: Build and Upload iOS IPAs
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  build-and-upload:
+    name: Build IPAs for all schemes
+    runs-on: macos-26
+
+    env:
+      PROJECT: ISSApp.xcodeproj
+      TARGET: ISSApp
+      OUTPUT_DIR: build
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - configuration: "Release-Production"
+            ipa_name: "ISSApp-Production"
+          - configuration: "Release-Development"
+            ipa_name: "ISSApp-Development"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        if: env.ACT != 'true'
+        run: xcodebuild -version
+
+      - name: Build unsigned (no Apple account)
+        if: env.ACT != 'true'
+        run: |
+          set -eo pipefail
+          mkdir -p "$OUTPUT_DIR"
+          xcodebuild \
+            -project "$PROJECT" \
+            -target "$TARGET" \
+            -configuration "${{ matrix.configuration }}" \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            SYMROOT="$OUTPUT_DIR" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package .app into IPA
+        if: env.ACT != 'true'
+        run: |
+          set -eo pipefail
+          DEVICE_APP="$OUTPUT_DIR/${{ matrix.configuration }}-iphoneos/$TARGET.app"
+          if [[ ! -d "$DEVICE_APP" ]]; then
+            echo "Error: Built app not found at $DEVICE_APP"
+            exit 1
+          fi
+          PAYLOAD_DIR="$OUTPUT_DIR/Payload-${{ matrix.configuration }}"
+          rm -rf "$PAYLOAD_DIR"
+          mkdir -p "$PAYLOAD_DIR"
+          cp -R "$DEVICE_APP" "$PAYLOAD_DIR/"
+          cd "$OUTPUT_DIR"
+          zip -r -y "${{ matrix.ipa_name }}.ipa" "Payload-${{ matrix.configuration }}"
+          cd -
+          echo "Created $OUTPUT_DIR/${{ matrix.ipa_name }}.ipa"
+
+      - name: Simulate build under act (no macOS/Xcode)
+        if: env.ACT == 'true'
+        run: |
+          set -eo pipefail
+          mkdir -p "$OUTPUT_DIR"
+          echo "Simulating IPA for ${{ matrix.configuration }} under act..."
+          echo "dummy ipa content" > "$OUTPUT_DIR/${{ matrix.ipa_name }}.ipa"
+
+      - name: Upload IPA to GitHub Release
+        if: env.ACT != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/${{ matrix.ipa_name }}.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
