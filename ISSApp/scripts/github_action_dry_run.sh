@@ -18,7 +18,9 @@ echo "Project root: $PROJECT_ROOT"
 act release \
   -W .github/workflows/ios-release-ipas.yml \
   -P macos-26=ghcr.io/catthehacker/ubuntu:act-latest \
-  --container-architecture linux/amd64
+  --container-architecture linux/amd64 \
+  --env ACT=true \
+  --job build
 
 echo "Done. Check act output above to verify the workflow steps."
 

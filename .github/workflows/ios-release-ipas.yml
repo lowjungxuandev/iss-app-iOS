@@ -100,6 +100,7 @@ jobs:
           printf "dummy ipa content: %s\n" "${{ matrix.configuration }}" > "$OUTPUT_DIR/${{ matrix.ipa_name }}.ipa"
 
       - name: Upload IPA as workflow artifact
+        if: steps.detect.outputs.is_act != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ipa-${{ matrix.ipa_name }}
@@ -113,13 +114,6 @@ jobs:
       contents: write
 
     steps:
-      - name: Download IPA artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: ipa-*
-          merge-multiple: true
-          path: build
-
       # Detect act here too (so local runs don't try to create releases)
       - name: Compute is_act
         id: detect
@@ -131,6 +125,14 @@ jobs:
           else
             echo "is_act=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Download IPA artifacts
+        if: steps.detect.outputs.is_act != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ipa-*
+          merge-multiple: true
+          path: build
 
       # On pushes to main: auto-create a Release and upload IPAs
       - name: Create Release (push to main) + upload IPAs
