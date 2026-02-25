@@ -1,9 +1,13 @@
 name: Build and Upload iOS IPAs
 
 on:
+  push:
+    branches:
+      - main
   release:
     types:
       - published
+  workflow_dispatch:
 
 jobs:
   build-and-upload:
@@ -77,7 +81,7 @@ jobs:
           echo "dummy ipa content" > "$OUTPUT_DIR/${{ matrix.ipa_name }}.ipa"
 
       - name: Upload IPA to GitHub Release
-        if: env.ACT != 'true'
+        if: env.ACT != 'true' && github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
