@@ -9,6 +9,10 @@ on:
       - published
   workflow_dispatch:
 
+# Use Node 24 for JS actions; aligns with https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     name: Build IPAs (matrix)
@@ -32,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Detect local 'act' runs:
       # - recommended: run `act --env ACT=true`
@@ -101,7 +105,7 @@ jobs:
 
       - name: Upload IPA as workflow artifact
         if: steps.detect.outputs.is_act != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ipa-${{ matrix.ipa_name }}
           path: build/${{ matrix.ipa_name }}.ipa
@@ -128,16 +132,18 @@ jobs:
 
       - name: Download IPA artifacts
         if: steps.detect.outputs.is_act != 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: ipa-*
           merge-multiple: true
           path: build
 
-      # On pushes to main: auto-create a Release and upload IPAs
-      - name: Create Release (push to main) + upload IPAs
-        if: steps.detect.outputs.is_act != 'true' && github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
+      # On push to main or manual run: create a Release and upload IPAs
+      - name: Create Release (push / manual) + upload IPAs
+        if: |
+          steps.detect.outputs.is_act != 'true' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
@@ -150,7 +156,7 @@ jobs:
       # On manually published Releases: just upload IPAs to that Release
       - name: Upload IPAs to published Release
         if: steps.detect.outputs.is_act != 'true' && github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             build/*.ipa
