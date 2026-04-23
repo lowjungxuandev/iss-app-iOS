@@ -70,9 +70,9 @@ If `ZDefend` is unavailable at compile time, startup and scan actions are safely
 
 ## ZDefend SDK framework location
 
-- Add the `ZDefend.xcframework` bundle at `ISSApp/ZDefend.xcframework` (relative to the `iOS` folder).
+- Bundled version: **5.9.56** (`ZDefend.xcframework` at `ISSApp/ZDefend.xcframework`, relative to the `iOS` folder).
 - In Xcode, select the `ISSApp` target and ensure `ZDefend.xcframework` appears under **Frameworks, Libraries, and Embedded Content** with **Embed & Sign**.
-- When updating the SDK version, replace the contents of `ZDefend.xcframework` at this path and let Xcode re-index the framework.
+- When updating the SDK version, replace the contents of `ZDefend.xcframework` at this path, bump the app `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the Xcode project as needed, and let Xcode re-index the framework.
 
 ## Requirements
 
