@@ -62,42 +62,39 @@ final class ZDefendBootstrapper {
         linkedFunctionRegistration = ZDefend.registerLinkedFunction(
             "THREAT_DETECTED",
             function: { event in
-                Task { @MainActor in
-                    let baseText = ZimperiumStatusFormatter.buildStatusText(status: event.deviceStatus)
-                    let threatNames = event.relatedThreats.map(\.internalName).joined(separator: ", ")
-                    let eventType: String
-                    switch event.eventType {
-                    case .ACTIVATED_LINKED_FUNCTION:
-                        eventType = "ACTIVATED"
-                    case .MITIGATED_LINKED_FUNCTION:
-                        eventType = "MITIGATED"
-                    @unknown default:
-                        eventType = "UNKNOWN"
-                    }
-
-                    ZimperiumLogStore.shared.text = """
-                    \(baseText)
-
-                    --- Linked Function Event ---
-                    Label: \(event.label)
-                    Type: \(eventType)
-                    Related threats: \(threatNames.isEmpty ? "none" : threatNames)
-                    """
+                let baseText = ZimperiumStatusFormatter.buildStatusText(status: event.deviceStatus)
+                let threatNames = event.relatedThreats.map(\.internalName).joined(separator: ", ")
+                let eventType: String
+                switch event.eventType {
+                case .ACTIVATED_LINKED_FUNCTION:
+                    eventType = "ACTIVATED"
+                case .MITIGATED_LINKED_FUNCTION:
+                    eventType = "MITIGATED"
+                @unknown default:
+                    eventType = "UNKNOWN"
                 }
+                let message = """
+                \(baseText)
+
+                --- Linked Function Event ---
+                Label: \(event.label)
+                Type: \(eventType)
+                Related threats: \(threatNames.isEmpty ? "none" : threatNames)
+                """
+                Task { @MainActor in ZimperiumLogStore.shared.text = message }
             },
             mitigateFunction: { event in
-                Task { @MainActor in
-                    let baseText = ZimperiumStatusFormatter.buildStatusText(status: event.deviceStatus)
-                    let threatNames = event.relatedThreats.map(\.internalName).joined(separator: ", ")
-                    ZimperiumLogStore.shared.text = """
-                    \(baseText)
+                let baseText = ZimperiumStatusFormatter.buildStatusText(status: event.deviceStatus)
+                let threatNames = event.relatedThreats.map(\.internalName).joined(separator: ", ")
+                let message = """
+                \(baseText)
 
-                    --- Linked Function Event ---
-                    Label: \(event.label)
-                    Type: MITIGATED
-                    Related threats: \(threatNames.isEmpty ? "none" : threatNames)
-                    """
-                }
+                --- Linked Function Event ---
+                Label: \(event.label)
+                Type: MITIGATED
+                Related threats: \(threatNames.isEmpty ? "none" : threatNames)
+                """
+                Task { @MainActor in ZimperiumLogStore.shared.text = message }
             }
         )
 
